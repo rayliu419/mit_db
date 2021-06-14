@@ -37,6 +37,7 @@ public enum Type implements Serializable {
         @Override
         public Field parse(DataInputStream dis) throws ParseException {
             try {
+                // string类型的实际上是变长的。
                 int strLen = dis.readInt();
                 byte[] bs = new byte[strLen];
                 dis.read(bs);

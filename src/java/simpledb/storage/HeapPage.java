@@ -6,6 +6,7 @@ import simpledb.common.DbException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -24,6 +25,7 @@ public class HeapPage implements Page {
     final Tuple[] tuples;
     final int numSlots;
 
+    // 用来做什么？
     byte[] oldData;
     private final Byte oldDataLock = (byte) 0;
 
@@ -43,18 +45,24 @@ public class HeapPage implements Page {
      * @see Database#getCatalog
      * @see Catalog#getTupleDesc
      * @see BufferPool#getPageSize()
+     * data这里是从磁盘read出来的字节流
      */
     public HeapPage(HeapPageId id, byte[] data) throws IOException {
         this.pid = id;
         this.td = Database.getCatalog().getTupleDesc(id.getTableId());
         this.numSlots = getNumTuples();
+        // 对这个字节流使用DataInputStream来读取
         DataInputStream dis = new DataInputStream(new ByteArrayInputStream(data));
 
         // allocate and read the header slots of this page
+        // 这里的逻辑是 - 不管磁盘上读出来的数据是什么样(空的和有数据的)，每个页面的结构都是一样的。
+        // 先是header，然后是记录。将byte[]的磁盘数据建立到内存中，存放在HeapPage这个对象中。
+        // 可以认为HeapPage就是内存中跟磁盘放记录的对应数据结构，后序通过HeapPage来访问数据了，byte[]就不重要了
+        // 先读header
         header = new byte[getHeaderSize()];
         for (int i = 0; i < header.length; i++)
             header[i] = dis.readByte();
-
+        // 再读真实数据，注意，这里是new了一个新数组，放在了内存中。
         tuples = new Tuple[numSlots];
         try {
             // allocate and read the actual records of this page
@@ -121,11 +129,12 @@ public class HeapPage implements Page {
      */
     public HeapPageId getId() {
         // some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return pid;
     }
 
     /**
      * Suck up tuples from the source file.
+     * 这个函数很重要，是从DataInputStream读取某个位置的tuple
      */
     private Tuple readNextTuple(DataInputStream dis, int slotId) throws NoSuchElementException {
         // if associated bit is not set, read forward to the next tuple, and
@@ -147,6 +156,7 @@ public class HeapPage implements Page {
         t.setRecordId(rid);
         try {
             for (int j = 0; j < td.numFields(); j++) {
+                // parse可是会改变dis的位置的
                 Field f = td.getFieldType(j).parse(dis);
                 t.setField(j, f);
             }
@@ -167,6 +177,7 @@ public class HeapPage implements Page {
      * have it produce an identical HeapPage object.
      *
      * @return A byte array correspond to the bytes of this page.
+     * 这个函数用来写将内存中的HeapPage写会到磁盘上去。
      * @see #HeapPage
      */
     public byte[] getPageData() {
@@ -174,6 +185,7 @@ public class HeapPage implements Page {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(len);
         DataOutputStream dos = new DataOutputStream(baos);
 
+        // 为什么要将header写会磁盘? - header估计也可以分开存储，但是比较麻烦。
         // create the header of the page
         for (byte b : header) {
             try {
@@ -213,6 +225,7 @@ public class HeapPage implements Page {
         }
 
         // padding
+        // 这个padding主要是写到最后用的。
         int zerolen = BufferPool.getPageSize() - (header.length + td.getSize() * tuples.length); //- numSlots * td.getSize();
         byte[] zeroes = new byte[zerolen];
         try {
@@ -293,7 +306,13 @@ public class HeapPage implements Page {
      */
     public int getNumEmptySlots() {
         // some code goes here
-        return 0;
+        int cnt = 0;
+        for (int i = 0; i < numSlots; ++i) {
+            if (!isSlotUsed(i)) {
+                ++cnt;
+            }
+        }
+        return cnt;
     }
 
     /**
@@ -301,7 +320,11 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
-        return false;
+        int quot = i / 8;
+        int remainder = i % 8;
+        int bitidx = header[quot];
+        int bit = (bitidx >> remainder) & 1;
+        return bit == 1;
     }
 
     /**
@@ -315,10 +338,17 @@ public class HeapPage implements Page {
     /**
      * @return an iterator over all tuples on this page (calling remove on this iterator throws an UnsupportedOperationException)
      * (note that this iterator shouldn't return tuples in empty slots!)
+     * 只是本页面的
      */
     public Iterator<Tuple> iterator() {
         // some code goes here
-        return null;
+        ArrayList<Tuple> validTuples = new ArrayList<Tuple>();
+        for (int i = 0; i < numSlots; ++i) {
+            if (isSlotUsed(i)) {
+                validTuples.add(tuples[i]);
+            }
+        }
+        return validTuples.iterator();
     }
 
 }

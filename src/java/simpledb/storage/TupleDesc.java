@@ -43,6 +43,14 @@ public class TupleDesc implements Serializable {
         }
     }
 
+    public void setFields(int i, TDItem t) {
+        fieldDescriptions.set(i, t);
+    }
+
+    public TDItem getFields(int i) {
+        return fieldDescriptions.get(i);
+    }
+
     /**
      * @return An iterator which iterates over all the field TDItems
      * that are included in this TupleDesc
@@ -68,7 +76,7 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr, String[] fieldAr) {
         // some code goes here
-        fieldDescriptions = new ArrayList();
+        fieldDescriptions = new ArrayList<TDItem>();
         for (int i = 0; i < typeAr.length; i++) {
             fieldDescriptions.add(new TDItem(typeAr[i], fieldAr[i]));
         }
@@ -83,7 +91,7 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr) {
         // some code goes here
-        fieldDescriptions = new ArrayList();
+        fieldDescriptions = new ArrayList<TDItem>();
         for (int i = 0; i < typeAr.length; i++) {
             fieldDescriptions.add(new TDItem(typeAr[i], ""));
         }
