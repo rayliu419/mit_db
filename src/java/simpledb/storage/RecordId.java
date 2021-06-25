@@ -20,6 +20,8 @@ public class RecordId implements Serializable {
      *
      * @param pid     the pageid of the page on which the tuple resides
      * @param tupleno the tuple number within the page.
+     *
+     * 记录在dbFile的块的序列号和在块内的index
      */
     public RecordId(PageId pid, int tupleno) {
         // some code goes here

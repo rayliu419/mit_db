@@ -7,6 +7,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -85,6 +86,7 @@ public class BufferPool {
             throws TransactionAbortedException, DbException {
         // some code goes here
         if (!idToPage.containsKey(pid.hashCode())) {
+            // 没在内存中
             DbFile dbfile = Database.getCatalog().getDatabaseFile(pid.getTableId());
             Page page = dbfile.readPage(pid);
             idToPage.put(pid.hashCode(), page);
@@ -156,6 +158,9 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> pages = (ArrayList<Page>) f.insertTuple(tid, t);
+        updateBufferPool(pages, tid);
     }
 
     /**
@@ -175,6 +180,20 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        ArrayList<Page> pages = (ArrayList<Page>) f.deleteTuple(tid, t);
+        updateBufferPool(pages, tid);
+    }
+
+    private void updateBufferPool(ArrayList<Page> pagelist, TransactionId tid) throws DbException {
+        for (Page p : pagelist) {
+            p.markDirty(true, tid);
+            // 更新内存页面
+            if (idToPage.size() > maxNumPages) {
+                evictPage();
+            }
+            idToPage.put(p.getId().hashCode(), p);
+        }
     }
 
     /**

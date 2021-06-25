@@ -6,9 +6,7 @@ import simpledb.common.Permissions;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -118,6 +116,19 @@ public class HeapFile implements DbFile {
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+        int pgNo = page.getId().getPageNumber();
+        if (pgNo > numPages()) {
+            throw new IllegalArgumentException();
+        }
+        int pgSize = BufferPool.getPageSize();
+        //write IO
+        RandomAccessFile f = new RandomAccessFile(file, "rw");
+        // set offset
+        f.seek(pgNo * pgSize);
+        // write
+        byte[] data = page.getPageData();
+        f.write(data);
+        f.close();
     }
 
     /**
@@ -132,17 +143,48 @@ public class HeapFile implements DbFile {
     // see DbFile.java for javadocs
     public List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        return null;
         // not necessary for lab1
+        // some code goes here
+        ArrayList<Page> pageList = new ArrayList<Page>();
+        for (int i = 0; i < numPages(); ++i) {
+            // took care of getting new page
+            // 这里是尝试从第一个page块开始查找空闲的slot，然后写入。如果没在内存中，需要去磁盘读。
+            HeapPage p = (HeapPage) Database.getBufferPool().getPage(
+                    tid,
+                    new HeapPageId(this.getId(), i),
+                    Permissions.READ_WRITE
+            );
+            if (p.getNumEmptySlots() == 0)
+                continue;
+            p.insertTuple(t);
+            pageList.add(p);
+            return pageList;
+        }
+        BufferedOutputStream bw = new BufferedOutputStream(new FileOutputStream(file, true));
+        byte[] emptyData = HeapPage.createEmptyPageData();
+        bw.write(emptyData);
+        bw.close();
+        // load into cache
+        // 初始的时候有没有一个页面?从下面来看，是有一个的。
+        HeapPage p = (HeapPage) Database.getBufferPool().getPage(
+                tid,
+                new HeapPageId(getId(), numPages() - 1),
+                Permissions.READ_WRITE);
+        p.insertTuple(t);
+        pageList.add(p);
+        return pageList;
     }
 
     // see DbFile.java for javadocs
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
-        // not necessary for lab1
+        ArrayList<Page> pageList = new ArrayList<Page>();
+        HeapPage p = (HeapPage) Database.getBufferPool().getPage(tid,
+                t.getRecordId().getPageId(), Permissions.READ_WRITE);
+        p.deleteTuple(t);
+        pageList.add(p);
+        return pageList;
     }
 
     // see DbFile.java for javadocs
@@ -152,18 +194,18 @@ public class HeapFile implements DbFile {
     }
 
     /**
-        在读取Tuple时，HeapFileIterator用来返回tuple，使得应用端可以这么调用:
-        DbFile table = Utility.openHeapFile(columns, tableFile);
-        TransactionId tid = new TransactionId();
-        DbFileIterator it = table.iterator(tid);
-        it.open();
-        while (it.hasNext()) {
-            Tuple t = it.next();
-            System.out.println(t);
-        }
-        it.close();
-        Iterator这种模式最主要的好处是屏蔽了应用端的复杂性，实际上在底层，可能还重新读取了磁盘，
-        还跳过了空的tuple等。
+     * 在读取Tuple时，HeapFileIterator用来返回tuple，使得应用端可以这么调用:
+     * DbFile table = Utility.openHeapFile(columns, tableFile);
+     * TransactionId tid = new TransactionId();
+     * DbFileIterator it = table.iterator(tid);
+     * it.open();
+     * while (it.hasNext()) {
+     * Tuple t = it.next();
+     * System.out.println(t);
+     * }
+     * it.close();
+     * Iterator这种模式最主要的好处是屏蔽了应用端的复杂性，实际上在底层，可能还重新读取了磁盘，
+     * 还跳过了空的tuple等。
      */
     private static final class HeapFileIterator implements DbFileIterator {
 
@@ -187,9 +229,9 @@ public class HeapFile implements DbFile {
                 throws TransactionAbortedException, DbException {
             if (pageNumber >= 0 && pageNumber < heapFile.numPages()) {
                 HeapPageId pid = new HeapPageId(heapFile.getId(), pageNumber);
-                HeapPage page =
-                        (HeapPage) Database.getBufferPool()
-                                .getPage(tid, pid, Permissions.READ_ONLY);
+                HeapPage page = (HeapPage) Database
+                        .getBufferPool()
+                        .getPage(tid, pid, Permissions.READ_ONLY);
                 return page.iterator();
             } else {
                 throw new DbException(String.format("heapfile %d does not contain page %d!", pageNumber, heapFile.getId()));
