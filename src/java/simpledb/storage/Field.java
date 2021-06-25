@@ -37,6 +37,7 @@ public interface Field extends Serializable{
      * return the same hashCode.
      */
     int hashCode();
+
     boolean equals(Object field);
 
     String toString();

@@ -14,6 +14,8 @@ import java.util.*;
  * resource allocation/deallocation, an open method should call any
  * child iterator open methods, and in a close method, an iterator
  * should call its children's close methods.
+ * 所有Simple DB的操作都应该实现OpIterator。
+ * 弄清楚这个的用处是弄清楚Simple DB怎么执行操作的精髓。
  */
 public interface OpIterator extends Serializable{
   /**
